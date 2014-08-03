@@ -292,6 +292,32 @@ interface:wrap("pow",
                 {name="CudaTensor", default=1},
                 {name="float"}})
 
+interface:wrap("emin",
+               cname("emin"),
+               {{name="CudaTensor", returned=true},
+                {name="CudaTensor", default=1},
+                {name="float"}})
+
+interface:wrap("emax",
+               cname("emax"),
+               {{name="CudaTensor", returned=true},
+                {name="CudaTensor", default=1},
+                {name="float"}})
+
+interface:wrap("clamp",
+               cname("clamp"),
+               {{name="CudaTensor", returned=true},
+                {name="CudaTensor", default=1},
+                {name="float"},
+                {name="float"}})
+                
+interface:wrap("mod",
+               cname("mod"),
+               {{name="CudaTensor", returned=true},
+                {name="CudaTensor", default=1},
+                {name="float"}})                
+                
+                
 
 for _,name in pairs({'lt','gt','le','ge','eq','ne'}) do
    interface:wrap(name,

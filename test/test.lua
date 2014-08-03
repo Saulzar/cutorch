@@ -253,31 +253,34 @@ function test.index()
    compareFloatAndCuda(x, 'index', index, longIndex)
 end
 
-function test.indexCopy()
+local function testReduce(name)
    local sz1 = math.floor(torch.uniform(minsize,maxsize)) -- dim1
    local sz2 = math.floor(torch.uniform(minsize,maxsize)) -- dim2
    local x = torch.FloatTensor():rand(sz1, sz2) -- input
-
 
    -- Case 1: 2D tensor, indexCopy over first dimension, 2 indices
    -- choose two indices from the first dimension, i.e. [1,sz1]
    local longIndex = torch.LongTensor{math.floor(torch.uniform(1, sz1)), math.floor(torch.uniform(1, sz1))}
    local index = 1
    local src = torch.Tensor(2, sz2):uniform()
-   compareFloatAndCudaTensorArgs(x, 'indexCopy', index, longIndex, src)
+   compareFloatAndCudaTensorArgs(x, name, index, longIndex, src)
 
    -- Case 2: 2D tensor, indexCopy over second dimension, 2 indices
    index = 2
    longIndex =  torch.LongTensor{math.floor(torch.uniform(1, sz2)), math.floor(torch.uniform(1, sz2))}
    src = torch.Tensor(sz1, 2):uniform():cuda()
-   compareFloatAndCudaTensorArgs(x, 'indexCopy', index, longIndex, src)
+   compareFloatAndCudaTensorArgs(x, name, index, longIndex, src)
 
    -- Case 3: 1D tensor, indexCopy over 1st dimension, 2 indices
    x = torch.FloatTensor():rand(sz1)
    index = 1
    longIndex = torch.LongTensor{math.floor(torch.uniform(1, sz1)), math.floor(torch.uniform(1, sz1))}
    src = torch.Tensor(2):uniform()
-   compareFloatAndCudaTensorArgs(x, 'indexCopy', index, longIndex, src)
+   compareFloatAndCudaTensorArgs(x, name, index, longIndex, src)
+end
+
+function test.testCopy(name)
+  testReduce('indexCopy')
 end
 
 function test.indexFill()

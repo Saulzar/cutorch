@@ -407,6 +407,7 @@ static int torch_Tensor_(indexSelect)(lua_State *L)
   return 1;
 }
 
+
 static int torch_Tensor_(indexCopy)(lua_State *L)
 {
   int narg = lua_gettop(L);
@@ -424,12 +425,60 @@ static int torch_Tensor_(indexCopy)(lua_State *L)
   {
     luaL_error(L,"Tensor, number, LongTensor, Tensor expected");
     return 0;
-  }
-
+  }  
   THTensor_(indexCopy)(tensor,dim,index,src);
 
   return 1;
 }
+
+static int torch_Tensor_(indexSum)(lua_State *L)
+{
+  int narg = lua_gettop(L);
+  THTensor *tensor, *src;
+  THLongTensor *index;
+  int dim;
+  if(narg == 4)
+  {
+    dim = luaL_checkint(L, 2) - 1;
+    index = luaT_checkudata(L, 3, "torch.LongTensor");
+    src = luaT_checkudata(L, 4, torch_Tensor);
+    tensor = luaT_checkudata(L,1,torch_Tensor);
+  }
+  else
+  {
+    luaL_error(L,"Tensor, number, LongTensor, Tensor expected");
+    return 0;
+  }  
+  THTensor_(indexSum)(tensor,dim,index,src);
+
+  return 1;
+}
+
+
+static int torch_Tensor_(indexProd)(lua_State *L)
+{
+  int narg = lua_gettop(L);
+  THTensor *tensor, *src;
+  THLongTensor *index;
+  int dim;
+  if(narg == 4)
+  {
+    dim = luaL_checkint(L, 2) - 1;
+    index = luaT_checkudata(L, 3, "torch.LongTensor");
+    src = luaT_checkudata(L, 4, torch_Tensor);
+    tensor = luaT_checkudata(L,1,torch_Tensor);
+  }
+  else
+  {
+    luaL_error(L,"Tensor, number, LongTensor, Tensor expected");
+    return 0;
+  }  
+  THTensor_(indexProd)(tensor,dim,index,src);
+
+  return 1;
+}
+
+
 
 static int torch_Tensor_(indexFill)(lua_State *L)
 {
@@ -1151,6 +1200,8 @@ static const struct luaL_Reg torch_Tensor_(_) [] = {
   {"select", torch_Tensor_(select)},
   {"index", torch_Tensor_(indexSelect)},
   {"indexCopy", torch_Tensor_(indexCopy)},
+  {"indexSum", torch_Tensor_(indexSum)},
+  {"indexProd", torch_Tensor_(indexProd)},  
   {"indexFill", torch_Tensor_(indexFill)},
   {"transpose", torch_Tensor_(transpose)},
   {"t", torch_Tensor_(t)},

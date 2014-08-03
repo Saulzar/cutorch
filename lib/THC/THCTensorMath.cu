@@ -738,7 +738,9 @@ struct pow_functor
   }
 };
 
-void THCudaTensor_pow(THCudaTensor *self_, THCudaTensor *src, float value)
+
+template<typename F>
+void THCudaTensor_transform(THCudaTensor *self_, THCudaTensor *src, F const &f)
 {
   THArgCheck(THCudaTensor_nElement(self_) == THCudaTensor_nElement(src), 2, "sizes do not match");
   THCudaTensor *self = THCudaTensor_newContiguous(self_);
@@ -747,10 +749,15 @@ void THCudaTensor_pow(THCudaTensor *self_, THCudaTensor *src, float value)
   thrust::device_ptr<float> self_data(THCudaTensor_data(self));
   thrust::device_ptr<float> src_data(THCudaTensor_data(src));
   
-  thrust::transform(src_data, src_data+size, self_data, pow_functor(value));
+  thrust::transform(src_data, src_data+size, self_data, f);
 
   THCudaTensor_free(src);
   THCudaTensor_freeCopyTo(self, self_);
+}
+
+void THCudaTensor_pow(THCudaTensor *self_, THCudaTensor *src, float value)
+{
+  return THCudaTensor_transform(self_, src, pow_functor(value));
 }
 
 
@@ -764,21 +771,84 @@ struct sign_functor
 
 void THCudaTensor_sign(THCudaTensor *self_, THCudaTensor *src)
 {
-  THArgCheck(THCudaTensor_nElement(self_) == THCudaTensor_nElement(src), 2, "size do not match");
-
-  {
-    THCudaTensor *self = THCudaTensor_newContiguous(self_);
-    long size = THCudaTensor_nElement(self);
-    src = THCudaTensor_newContiguous(src);
-    thrust::device_ptr<float> self_data(THCudaTensor_data(self));
-    thrust::device_ptr<float> src_data(THCudaTensor_data(src));
-
-    thrust::transform(src_data, src_data+size, self_data, sign_functor());
-
-    THCudaTensor_free(src);
-    THCudaTensor_freeCopyTo(self, self_);
-  }
+  return THCudaTensor_transform(self_, src, sign_functor());
 }
+
+
+struct min_functor
+{
+  const float value;
+
+  min_functor(float value_) : value(value_) {}
+
+    __host__ __device__ float operator()(const float& x) const
+  {
+    return fmin(x, value);
+  }
+};
+
+
+struct max_functor
+{
+  const float value;
+
+  max_functor(float value_) : value(value_) {}
+
+    __host__ __device__ float operator()(const float& x) const
+  {
+    return fmax(x, value);
+  }
+};
+
+
+struct clamp_functor
+{
+  const float min;
+  const float max;
+
+  clamp_functor(float min_, float max_) : min(min_), max(max_) {}
+
+    __host__ __device__ float operator()(const float& x) const
+  {
+    return fmax(min, fmin (x, max));
+  }
+};
+
+
+struct mod_functor
+{
+  const float denom;
+
+  mod_functor(float denom_) : denom(denom_) {}
+
+    __host__ __device__ float operator()(const float& x) const
+  {
+    return fmod(x, denom);
+  }
+};
+
+
+void THCudaTensor_emin(THCudaTensor *self_, THCudaTensor *src, float value)
+{
+  return THCudaTensor_transform(self_, src, min_functor(value));
+}
+
+void THCudaTensor_emax(THCudaTensor *self_, THCudaTensor *src, float value)
+{
+  return THCudaTensor_transform(self_, src, max_functor(value));
+}
+
+void THCudaTensor_clamp(THCudaTensor *self_, THCudaTensor *src, float min, float max)
+{
+  return THCudaTensor_transform(self_, src, clamp_functor(min, max));
+}
+
+void THCudaTensor_mod(THCudaTensor *self_, THCudaTensor *src, float denom)
+{
+  return THCudaTensor_transform(self_, src, mod_functor(denom));
+}
+
+
 
 float THCudaTensor_meanall(THCudaTensor *self)
 {
@@ -1167,9 +1237,34 @@ __global__ void THCudaTensor_kernel_indexFill(
   }
 }	
 
-__global__ void THCudaTensor_kernel_indexCopy(
+struct copy_functor
+{
+  __host__ __device__ float operator()(const float& x, const float& y) const
+  {
+    return y;
+  }
+};
+
+struct add_functor
+{
+  __host__ __device__ float operator()(const float& x, const float& y) const
+  {
+    return x + y;
+  }
+};
+
+struct mul_functor
+{
+  __host__ __device__ float operator()(const float& x, const float& y) const
+  {
+    return x * y;
+  }
+};
+
+template<typename F>
+__global__ void THCudaTensor_kernel_indexReduce(
    float *res, float *src, long* res_stride, float *index, 
-   long res_nDim, int dim, long idx_size, long src_size, long size_dim
+   long res_nDim, int dim, long idx_size, long src_size, long size_dim, F op
 )
 {
   int thread_idx = blockIdx.x * blockDim.x * blockDim.y + threadIdx.y * blockDim.x + threadIdx.x;
@@ -1202,12 +1297,15 @@ __global__ void THCudaTensor_kernel_indexCopy(
           resIdx += coeff * res_stride[d];
         } 
       }
-      res[resIdx + ((int)(index[i])-1)*res_stride[dim]] = src[targetIdx + i*res_stride[dim]];
+      
+      int idx = resIdx + ((int)(index[i])-1)*res_stride[dim];
+      res[idx] = op(res[idx], src[targetIdx + i*res_stride[dim]]);
     }
   }
-}	
+}
 
-void THCudaTensor_indexCopy(THCudaTensor *res_, int dim, THLongTensor *indices, THCudaTensor *src)
+template<typename F>
+void THCudaTensor_indexReduce(THCudaTensor *res_, int dim, THLongTensor *indices, THCudaTensor *src, F const &op)
 {
   THCudaTensor *indices_;
   long *stride_;
@@ -1229,15 +1327,27 @@ void THCudaTensor_indexCopy(THCudaTensor *res_, int dim, THLongTensor *indices, 
   THCudaCheck(cudaMalloc((void**)&stride_, res_->nDimension * sizeof(long)));
   THCudaCheck(cudaMemcpy(stride_, res_->stride, res_->nDimension * sizeof(long), cudaMemcpyHostToDevice));
   
-  THCudaTensor_kernel_indexCopy<<<nblocks, nthreads>>>(
+  THCudaTensor_kernel_indexReduce<<<nblocks, nthreads>>>(
     THCudaTensor_data(res_), THCudaTensor_data(src), 
     stride_, THCudaTensor_data(indices_), 
     res_->nDimension, dim, nIndex, 
-    THCudaTensor_nElement(src), res_->size[dim]
+    THCudaTensor_nElement(src), res_->size[dim], op
   );
     
   THCudaCheck(cudaFree(stride_));
   THCudaTensor_free(indices_);
+}
+
+void THCudaTensor_indexCopy(THCudaTensor *res_, int dim, THLongTensor *indices, THCudaTensor *src) {
+  THCudaTensor_indexReduce(res_, dim, indices, src,  copy_functor());
+}
+
+void THCudaTensor_indexSum(THCudaTensor *res_, int dim, THLongTensor *indices, THCudaTensor *src) {
+  THCudaTensor_indexReduce(res_, dim, indices, src,  add_functor());
+}
+
+void THCudaTensor_indexProd(THCudaTensor *res_, int dim, THLongTensor *indices, THCudaTensor *src) {
+  THCudaTensor_indexReduce(res_, dim, indices, src,  mul_functor());
 }
 
 
