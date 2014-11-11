@@ -6,7 +6,6 @@
 
 #include "cuda.h"
 #include "cublas.h"
-//#include "cuda_runtime_api.h"
 
 #ifdef __cplusplus
 # define THC_EXTERNC extern "C"
@@ -22,6 +21,10 @@
 # endif
 #else
 # define THC_API THC_EXTERNC
+#endif
+
+#ifndef DIVUP
+#define DIVUP(x, y) (((x) + (y) - 1) / (y))
 #endif
 
 THC_API void THCudaInit(void);

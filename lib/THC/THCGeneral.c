@@ -1,14 +1,42 @@
 #include "THCGeneral.h"
 #include "TH.h"
+#include "THCTensorRandom.h"
 
 void THCudaInit(void)
 {
   if(cublasInit() != CUBLAS_STATUS_SUCCESS)
     THError("unable to initialize cublas");
+
+  int count = 0;
+  THCudaCheck(cudaGetDeviceCount(&count));
+
+  int device = 0;
+  THCudaCheck(cudaGetDevice(&device));
+
+  THCRandom_init(count, device);
+
+  int i,j;
+  for(i=0; i < count; ++i)
+  {
+    THCudaCheck(cudaSetDevice(i));
+    for (j=0; j < count; ++j)
+    {
+      if(i != j)
+      {
+        int can = 0;
+        THCudaCheck(cudaDeviceCanAccessPeer(&can, i, j));
+        if(can)
+          THCudaCheck(cudaDeviceEnablePeerAccess(j, 0));
+      }
+    }
+  }
+  THCudaCheck(cudaSetDevice(device));
 }
 
 void THCudaShutdown(void)
 {
+  THCRandom_shutdown();
+
   if(cublasShutdown() != CUBLAS_STATUS_SUCCESS)
     THError("unable to shutdown cublas");
 }

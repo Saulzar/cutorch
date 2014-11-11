@@ -8,7 +8,7 @@ extern void cutorch_CudaTensorMath_init(lua_State* L);
 
 static int cutorch_synchronize(lua_State *L)
 {
-  cudaDeviceSynchronize();  
+  cudaDeviceSynchronize();
   return 0;
 }
 
@@ -39,7 +39,7 @@ static int cutorch_setDevice(lua_State *L)
 {
   int device = (int)luaL_checknumber(L, 1)-1;
   THCudaCheck(cudaSetDevice(device));
-  THCRandom_manualSeed(THCRandom_initialSeed());
+  THCRandom_setGenerator(device);
   return 0;
 }
 
@@ -75,7 +75,7 @@ static int cutorch_getDeviceProperties(lua_State *L)
   SET_DEVN_PROP(pciDomainID);
   SET_DEVN_PROP(maxTexture1D);
   SET_DEVN_PROP(maxTexture1DLinear);
-  
+
   size_t freeMem;
   THCudaCheck(cudaMemGetInfo (&freeMem, NULL));
   lua_pushnumber(L, freeMem);
@@ -108,6 +108,21 @@ static int cutorch_manualSeed(lua_State *L)
   return 0;
 }
 
+static int cutorch_getRNGState(lua_State *L)
+{
+  THByteTensor* t = THByteTensor_new();
+  THCRandom_getRNGState(t);
+  luaT_pushudata(L, t, "torch.ByteTensor");
+  return 1;
+}
+
+static int cutorch_setRNGState(lua_State *L)
+{
+  THByteTensor* t = luaT_checkudata(L, 1, "torch.ByteTensor");
+  THCRandom_setRNGState(t);
+  return 0;
+}
+
 static const struct luaL_Reg cutorch_stuff__ [] = {
   {"synchronize", cutorch_synchronize},
   {"getDevice", cutorch_getDevice},
@@ -118,6 +133,8 @@ static const struct luaL_Reg cutorch_stuff__ [] = {
   {"seed", cutorch_seed},
   {"initialSeed", cutorch_initialSeed},
   {"manualSeed", cutorch_manualSeed},
+  {"getRNGState", cutorch_getRNGState},
+  {"setRNGState", cutorch_setRNGState},
   {NULL, NULL}
 };
 
@@ -130,11 +147,10 @@ int luaopen_libcutorch(lua_State *L)
 
   THCudaInit();
 
-  THCRandom_seed();
-
   cutorch_CudaStorage_init(L);
   cutorch_CudaTensor_init(L);
   cutorch_CudaTensorMath_init(L);
+  cutorch_CudaTensorOperator_init(L);
 
   return 1;
 }
